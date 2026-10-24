@@ -33,8 +33,22 @@ jobs:
       - name: Apply Caelvyr 1.1.0 flight-deck and scenery updates; package source
         shell: bash
         run: |
+          python3 -m py_compile tools/patch_caelvyr.py tools/patch_caelvyr_110.py
           python3 tools/patch_caelvyr.py "$PROJECT_DIR"
           python3 tools/patch_caelvyr_110.py "$PROJECT_DIR"
+          python3 - "$PROJECT_DIR/app/src/main/assets/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          h = p.read_text(encoding="utf-8")
+          required = ["CAELVYR 1.1.0 premium aeronautical flight-deck interface", "CAELVYR 1.1.0 premium flight systems", "cvBuildPremiumHangar", "mm-world-satellite"]
+          missing = [item for item in required if item not in h]
+          if missing:
+              raise SystemExit("Missing 1.1.0 output features: " + ", ".join(missing))
+          if "function cvForestStatsHTML" in h or "cvForestStatsHTML()" in h:
+              raise SystemExit("Forest statistics panel was not removed")
+          print("Caelvyr 1.1.0 output feature checks passed.")
+          PY
           if [ -f Changelog.md ]; then cp Changelog.md "$PROJECT_DIR/CHANGELOG.md"; fi
           mkdir -p "$PROJECT_DIR/publish"
           rm -f /tmp/Caelvyr_Android_Project-patched.zip
