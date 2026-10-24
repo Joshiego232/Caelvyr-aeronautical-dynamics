@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repeatable patch for Caelvyr 1.0.1."""
+"""Repeatable patch for Caelvyr 1.1.0 premium flight-deck update."""
 from pathlib import Path
 import re, sys
 root=Path(sys.argv[1]).resolve()
@@ -132,28 +132,26 @@ once("""  const dummy = new THREE.Object3D();
   function placeTree(rec, x, h, z, s, ry, trunkY, canopyY, leanX, leanZ) {
     if (rec.n >= rec.max) return;""",
 """  const dummy = new THREE.Object3D();
-  const TREE_ISLAND_COUNTS = WORLD_ISLANDS.map(() => 0);
-  const TREE_ISLAND_CLUSTERS = WORLD_ISLANDS.map(() => 0);
-  let currentTreeIslandIndex = -1, TREE_CLUSTER_COUNT = 0;
 
   function makeInstancedPair(trunkGeo, trunkMat, canopyGeo, canopyMat, maxCount) {
     const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, maxCount);
     const canopyInst = new THREE.InstancedMesh(canopyGeo, canopyMat, maxCount);
-    trunkInst.castShadow = false; canopyInst.castShadow = false;
-    trunkInst.frustumCulled = true; canopyInst.frustumCulled = true;
+    trunkInst.castShadow = false;
+    canopyInst.castShadow = false;
+    trunkInst.frustumCulled = true;
+    canopyInst.frustumCulled = true;
     return { trunkInst, canopyInst, n: 0, max: maxCount };
   }
 
   function placeTree(rec, x, h, z, s, ry, trunkY, canopyY, leanX, leanZ) {
-    if (rec.n >= rec.max) return false;""","forest instance counters")
+    if (rec.n >= rec.max) return false;""","unclustered forest placement")
 once("""    rec.canopyInst.setMatrixAt(rec.n, dummy.matrix);
     rec.n++;
   }""",
 """    rec.canopyInst.setMatrixAt(rec.n, dummy.matrix);
     rec.n++;
-    if (currentTreeIslandIndex >= 0 && TREE_ISLAND_COUNTS[currentTreeIslandIndex] !== undefined) TREE_ISLAND_COUNTS[currentTreeIslandIndex]++;
     return true;
-  }""","count placed trees")
+  }""","single-tree placement result")
 
 for old,new,label in [
 ("    new THREE.ConeGeometry(7, 16, 7), new THREE.MeshLambertMaterial({ color: 0x2f6b3a, map: pineFoliageTex }),\n    22000","    new THREE.ConeGeometry(7, 16, 7), new THREE.MeshLambertMaterial({ color: 0x2f6b3a, map: pineFoliageTex }),\n    48000","pine pool"),
@@ -164,17 +162,17 @@ for old,new,label in [
 ts=s.find("  let attempts = 0;\n  const TOTAL_TARGET = pine.max + decid.max + autumn.max + palm.max;")
 te=s.find("  finalizePair(pine);",ts)
 if ts<0 or te<0: raise SystemExit("Could not locate tree population loop")
-if "function tryPlaceClusterTree" not in s[ts:te]:
+if "function tryPlaceSingleTree" not in s[ts:te]:
     block=r'''  let attempts = 0;
   const TOTAL_TARGET = pine.max + decid.max + autumn.max + palm.max;
   const ISL_AREA = WORLD_ISLANDS.reduce((a,b)=>a+b.area,0);
-  let forestPopulationBuilt = 0;
-  function tryPlaceClusterTree(x,z,islandIndex) {
+
+  // Individual biome-aware tree placement; no seed clusters or cluster-size targets.
+  function tryPlaceSingleTree(x,z) {
     if (islandT(x,z)<0) return false;
     const h=terrainHeightAt(x,z);
     if (h>260 || hardZoneFactor(x,z)>0.05) return false;
     const scale=0.58+Math.random()*1.16, yaw=Math.random()*Math.PI*2;
-    currentTreeIslandIndex=islandIndex;
     if (h<WATER_LEVEL+9) {
       if (h<WATER_LEVEL+2 || Math.random()>0.48) return false;
       const lean=(Math.random()-0.5)*0.35;
@@ -183,7 +181,8 @@ if "function tryPlaceClusterTree" not in s[ts:te]:
     const plains=plainsFactor(x,z), forest=forestZoneFactor(x,z), dry=desertFactorAt(x,z), wet=swampFactorAt(x,z);
     if (dry>0.76 && Math.random()>0.14) return false;
     if (h<58) {
-      let accept=(0.78+forest*0.36)*(1-plains*0.34)*(1-dry*0.82); accept=Math.min(0.98,accept*(1+wet*0.30));
+      let accept=(0.78+forest*0.36)*(1-plains*0.34)*(1-dry*0.82);
+      accept=Math.min(0.98,accept*(1+wet*0.30));
       if (Math.random()>accept) return false;
       let rec=Math.random()<0.16?autumn:decid;
       if (rec.n>=rec.max) rec=rec===decid?autumn:decid;
@@ -191,35 +190,26 @@ if "function tryPlaceClusterTree" not in s[ts:te]:
       if (pine.n<pine.max && h>18) return placeTree(pine,x,h,z,scale*0.9,yaw,4,14);
       return false;
     }
-    let accept=(h<210?0.94:0.62)+forest*0.24; accept*=(1-plains*0.32)*(1-dry*0.88);
+    let accept=(h<210?0.94:0.62)+forest*0.24;
+    accept*=(1-plains*0.32)*(1-dry*0.88);
     if (Math.random()>Math.min(0.98,accept)) return false;
     if (pine.n<pine.max) return placeTree(pine,x,h,z,scale,yaw,4,14);
     const fallback=decid.n<decid.max?decid:(autumn.n<autumn.max?autumn:null);
     return fallback?placeTree(fallback,x,h,z,scale*0.88,yaw,3.2,8.6):false;
   }
-  while (pine.n+decid.n+autumn.n+palm.n<TOTAL_TARGET && attempts<TOTAL_TARGET*6) {
+
+  while (pine.n+decid.n+autumn.n+palm.n<TOTAL_TARGET && attempts<TOTAL_TARGET*8) {
     attempts++;
     let pick=Math.random()*ISL_AREA, islandIndex=0;
     for(let k=0;k<WORLD_ISLANDS.length;k++){pick-=WORLD_ISLANDS[k].area;if(pick<=0){islandIndex=k;break;}}
-    const isl=WORLD_ISLANDS[islandIndex], cx=isl.x0+Math.random()*(isl.x1-isl.x0), cz=isl.z0+Math.random()*(isl.z1-isl.z0);
-    if(islandT(cx,cz)<0) continue;
-    const ch=terrainHeightAt(cx,cz);
-    if(ch>260 || hardZoneFactor(cx,cz)>0.05) continue;
-    if(desertFactorAt(cx,cz)>0.84 && Math.random()>0.18) continue;
-    const clusterRadius=30+Math.random()*115, clusterSize=105+Math.floor(Math.random()*60);
-    const before=pine.n+decid.n+autumn.n+palm.n;
-    let placed=0, tries=0;
-    while(placed<clusterSize && tries<clusterSize*5 && pine.n+decid.n+autumn.n+palm.n<TOTAL_TARGET){
-      tries++; const a=Math.random()*Math.PI*2, r=clusterRadius*Math.sqrt(Math.random());
-      if(tryPlaceClusterTree(cx+Math.cos(a)*r,cz+Math.sin(a)*r,islandIndex)) placed++;
-    }
-    const after=pine.n+decid.n+autumn.n+palm.n;
-    if(after>before){TREE_ISLAND_CLUSTERS[islandIndex]++;TREE_CLUSTER_COUNT++;forestPopulationBuilt+=after-before;}
+    const isl=WORLD_ISLANDS[islandIndex];
+    const x=isl.x0+Math.random()*(isl.x1-isl.x0);
+    const z=isl.z0+Math.random()*(isl.z1-isl.z0);
+    tryPlaceSingleTree(x,z);
   }
-  currentTreeIslandIndex=-1;
-  console.info("[Caelvyr forests] instances:",forestPopulationBuilt,"clusters:",TREE_CLUSTER_COUNT,
-    "by island:",WORLD_ISLANDS.map((isl,i)=>({island:isl.label,trees:TREE_ISLAND_COUNTS[i],clusters:TREE_ISLAND_CLUSTERS[i]})));
-
+  console.info("[Caelvyr forests] independently distributed instances:",
+    pine.n+decid.n+autumn.n+palm.n,"of",TOTAL_TARGET,"target");
+  
 '''
     s=s[:ts]+block+s[te:]
 
