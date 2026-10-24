@@ -30,10 +30,11 @@ jobs:
             exit 1
           fi
 
-      - name: Patch simulator, map and forest; package patched source
+      - name: Apply Caelvyr 1.1.0 flight-deck and scenery updates; package source
         shell: bash
         run: |
           python3 tools/patch_caelvyr.py "$PROJECT_DIR"
+          python3 tools/patch_caelvyr_110.py "$PROJECT_DIR"
           if [ -f Changelog.md ]; then cp Changelog.md "$PROJECT_DIR/CHANGELOG.md"; fi
           mkdir -p "$PROJECT_DIR/publish"
           rm -f /tmp/Caelvyr_Android_Project-patched.zip
