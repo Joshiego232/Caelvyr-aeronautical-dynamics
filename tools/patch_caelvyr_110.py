@@ -26,11 +26,12 @@ s = re.sub(r"\n\.mm-forest-stats\{[^\n]*\}\n\.mm-forest-total\{[^\n]*\}\n\.mm-fo
 
 # Keep the aircraft-preview camera where the player left it. Any scripted menu
 # rotation is disabled; pointer drag below is the only source of camera motion.
-s = re.sub(
-    r"menuPreview\.el\s*=\s*0\.2;",
-    "if (!window.__cvHangarCameraInitialized) { menuPreview.el = 0.2; window.__cvHangarCameraInitialized = true; }",
-    s,
-)
+if "window.__cvHangarCameraInitialized" not in s:
+    s = re.sub(
+        r"menuPreview\.el\s*=\s*0\.2;",
+        "if (!window.__cvHangarCameraInitialized) { menuPreview.el = 0.2; window.__cvHangarCameraInitialized = true; }",
+        s,
+    )
 s = re.sub(r"menuPreview\.theta\s*\+=\s*[^;]+;", "menuPreview.theta = menuPreview.theta;", s)
 s = s.replace(
     "buildMenuHangar(ap, previewT, specs, clear);",
