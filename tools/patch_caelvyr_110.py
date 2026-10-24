@@ -54,7 +54,7 @@ if "ctx.globalCompositeOperation='soft-light'" not in s:
     marker = "    canvas._airportPoints=[];"
     if marker not in s:
         raise SystemExit("Could not locate airport map drawing hook")
-    overlay = "    if (cvAirportSatelliteMode && cvSatelliteCanvas) { ctx.save(); ctx.globalCompositeOperation='soft-light'; ctx.globalAlpha=0.30; ctx.drawImage(cvSatelliteCanvas,0,0,w,h); ctx.restore(); }\n"
+    overlay = "    if (cvAirportSatelliteMode && cvSatelliteCanvas) { ctx.save(); ctx.globalCompositeOperation='soft-light'; ctx.globalAlpha=0.30; ctx.drawImage(cvSatelliteCanvas,w/2+(-TERRAIN_SIZE/2-cx)*scale,h/2+(-TERRAIN_SIZE/2-cz)*scale,TERRAIN_SIZE*scale,TERRAIN_SIZE*scale); ctx.restore(); }\n"
     s = s.replace(marker, overlay + marker, 1)
 
 fit_binding = "const fit=$('mm-world-fit');if(fit)fit.addEventListener('click',function(){cvAirportMapZoom=1;draw();});"
@@ -258,7 +258,16 @@ function cvInstallStationaryHangarCamera(){
   cvSatelliteCanvas=cvCreateSatelliteCanvas();
   cvInstallStationaryHangarCamera();
   requestAnimationFrame(function(){cvUpgradeSceneryMaterials();});
-  cvSetUltraShaderEnabled(false);
+  function cvLoadUltraPreference(){
+    try{
+      for(var i=0;i<localStorage.length;i++){
+        var k=localStorage.key(i)||'',v=localStorage.getItem(k)||'';
+        if(/graphics|quality|preset/i.test(k+' '+v)&&/\bultra\b/i.test(v)&&!/ultra.?low/i.test(v))return true;
+      }
+    }catch(_){}
+    return false;
+  }
+  cvSetUltraShaderEnabled(cvLoadUltraPreference());
   document.addEventListener('click',function(e){
     var b=e.target&&e.target.closest?e.target.closest('button,[role="button"]'):null;if(!b)return;
     var label=String(b.innerText||b.textContent||'').trim().toUpperCase().replace(/\s+/g,' ');
