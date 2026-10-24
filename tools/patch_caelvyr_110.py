@@ -38,6 +38,32 @@ s = s.replace(
     "cvBuildPremiumHangar(ap, previewT, specs, clear);",
 )
 
+# Add the satellite-style switch to the airport map and composite the offline
+# satellite-style canvas below airport labels and selection markers.
+if 'id="mm-world-satellite"' not in s:
+    s, map_button_count = re.subn(
+        r'(<button id="mm-world-fit" type="button">FIT WORLD</button>)(\s*</div>)',
+        r'\1<button id="mm-world-satellite" type="button">SATELLITE ON</button>\2',
+        s,
+        count=1,
+    )
+    if map_button_count != 1:
+        raise SystemExit("Could not locate the airport map Fit World button")
+
+if "ctx.globalCompositeOperation='soft-light'" not in s:
+    marker = "    canvas._airportPoints=[];"
+    if marker not in s:
+        raise SystemExit("Could not locate airport map drawing hook")
+    overlay = "    if (cvAirportSatelliteMode && cvSatelliteCanvas) { ctx.save(); ctx.globalCompositeOperation='soft-light'; ctx.globalAlpha=0.30; ctx.drawImage(cvSatelliteCanvas,0,0,w,h); ctx.restore(); }\n"
+    s = s.replace(marker, overlay + marker, 1)
+
+fit_binding = "const fit=$('mm-world-fit');if(fit)fit.addEventListener('click',function(){cvAirportMapZoom=1;draw();});"
+if "const sat=$('mm-world-satellite')" not in s:
+    if fit_binding not in s:
+        raise SystemExit("Could not locate airport map control binding hook")
+    satellite_binding = fit_binding + "\n    const sat=$('mm-world-satellite');if(sat)sat.addEventListener('click',function(){cvAirportSatelliteMode=!cvAirportSatelliteMode;sat.textContent=cvAirportSatelliteMode?'SATELLITE ON':'SATELLITE OFF';draw();});"
+    s = s.replace(fit_binding, satellite_binding, 1)
+
 premium_css = r"""
 /* CAELVYR 1.1.0 premium aeronautical flight-deck interface */
 #menu-screen.mm{background:radial-gradient(ellipse at 52% 42%,#162a36 0%,#0a131b 48%,#05090e 100%)!important;color:#e9eef0!important;font-family:Inter,"Segoe UI",Roboto,system-ui,sans-serif!important}
