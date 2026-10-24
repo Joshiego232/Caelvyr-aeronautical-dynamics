@@ -47,8 +47,16 @@ jobs:
               raise SystemExit("Missing 1.1.0 output features: " + ", ".join(missing))
           if "function cvForestStatsHTML" in h or "cvForestStatsHTML()" in h:
               raise SystemExit("Forest statistics panel was not removed")
+          if "function tryPlaceClusterTree" in h or "TREE_CLUSTER_COUNT" in h:
+              raise SystemExit("Tree-cluster generator or counters are still present")
+          start = h.find("/* CAELVYR 1.1.0 premium flight systems")
+          end = h.find("</script>", start)
+          if start < 0 or end < 0:
+              raise SystemExit("Could not isolate the premium JavaScript for syntax validation")
+          Path("/tmp/caelvyr-premium.js").write_text(h[start:end], encoding="utf-8")
           print("Caelvyr 1.1.0 output feature checks passed.")
           PY
+          node --check /tmp/caelvyr-premium.js
           if [ -f Changelog.md ]; then cp Changelog.md "$PROJECT_DIR/CHANGELOG.md"; fi
           mkdir -p "$PROJECT_DIR/publish"
           rm -f /tmp/Caelvyr_Android_Project-patched.zip
