@@ -4,20 +4,25 @@ name: Build Caelvyr Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Check out project
+      - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Extract project ZIP
-        run: unzip -q Caelvyr_Android_Project.zip
+      - name: Extract updated Android project
+        run: |
+          if [ -f Caelvyr_Android_Project.zip ]; then
+            unzip -oq Caelvyr_Android_Project.zip
+          fi
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -38,7 +43,7 @@ jobs:
       - name: Build debug APK
         run: gradle --no-daemon -p Caelvyr_Android_Project assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: Caelvyr-Aeronautical-Dynamics-debug-apk
