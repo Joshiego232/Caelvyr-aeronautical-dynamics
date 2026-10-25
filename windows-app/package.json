@@ -1,0 +1,48 @@
+
+{
+  "name": "caelvyr-aeronautical-dynamics",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Caelvyr Aeronautical Dynamics by Skybound Systems",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64"
+  },
+  "dependencies": {
+    "express": "latest"
+  },
+  "devDependencies": {
+    "electron": "latest",
+    "electron-builder": "latest"
+  },
+  "build": {
+    "appId": "com.skyboundsystems.caelvyr",
+    "productName": "Caelvyr Aeronautical Dynamics",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "simulator/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Caelvyr-Aeronautical-Dynamics-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
