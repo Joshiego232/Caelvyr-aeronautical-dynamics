@@ -1,0 +1,187 @@
+
+name: Build Windows Installer and Add to Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag, for example v1.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate the existing release tag
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
+            throw "Enter an existing release tag, such as v1.1.0."
+          }
+
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+([\-+].*)?$') {
+            throw "Use a tag in the format v1.1.0."
+          }
+
+          gh release view "$env:RELEASE_TAG" --repo "$env:GITHUB_REPOSITORY"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "This release does not exist. Publish the Android release first."
+          }
+
+          "RELEASE_TAG=$($env:RELEASE_TAG)" |
+            Add-Content -Path $env:GITHUB_ENV
+
+          "CAELVYR_VERSION=$($env:RELEASE_TAG.Substring(1))" |
+            Add-Content -Path $env:GITHUB_ENV
+
+      - name: Find or extract the Android project
+        shell: pwsh
+        run: |
+          $projectDir = $null
+
+          if (Test-Path "settings.gradle") {
+            $projectDir = "."
+          }
+          elseif (Test-Path "Caelvyr_Android_Project.zip") {
+            Expand-Archive `
+              -LiteralPath "Caelvyr_Android_Project.zip" `
+              -DestinationPath "." `
+              -Force
+
+            if (Test-Path "Caelvyr_Android_Project/settings.gradle") {
+              $projectDir = "Caelvyr_Android_Project"
+            }
+          }
+          elseif (Test-Path "Caelvyr_Android_Project/settings.gradle") {
+            $projectDir = "Caelvyr_Android_Project"
+          }
+
+          if (!$projectDir) {
+            throw "Android project not found. Check the project ZIP and repository files."
+          }
+
+          "PROJECT_DIR=$projectDir" |
+            Add-Content -Path $env:GITHUB_ENV
+
+      - name: Apply the existing Caelvyr patches
+        shell: pwsh
+        run: |
+          python -m py_compile tools/patch_caelvyr.py tools/patch_caelvyr_110.py
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not validate the Caelvyr patch scripts."
+          }
+
+          python tools/patch_caelvyr.py "$env:PROJECT_DIR"
+          if ($LASTEXITCODE -ne 0) {
+            throw "The first Caelvyr patch failed."
+          }
+
+          python tools/patch_caelvyr_110.py "$env:PROJECT_DIR"
+          if ($LASTEXITCODE -ne 0) {
+            throw "The Caelvyr 1.1.0 patch failed."
+          }
+
+      - name: Copy the simulator HTML and assets
+        shell: pwsh
+        run: |
+          $assetDir = Join-Path $env:PROJECT_DIR "app/src/main/assets"
+          $indexFile = Join-Path $assetDir "index.html"
+
+          if (!(Test-Path $indexFile)) {
+            throw "The simulator index.html file was not found."
+          }
+
+          $destination = Join-Path $env:GITHUB_WORKSPACE "windows-app/simulator"
+
+          New-Item `
+            -ItemType Directory `
+            -Path $destination `
+            -Force | Out-Null
+
+          Get-ChildItem -LiteralPath $assetDir -Force |
+            Copy-Item -Destination $destination -Recurse -Force
+
+          if (!(Test-Path (Join-Path $destination "index.html"))) {
+            throw "Could not copy the simulator HTML into the Windows app."
+          }
+
+      - name: Set the installer version
+        shell: pwsh
+        run: |
+          $packagePath = Join-Path $env:GITHUB_WORKSPACE "windows-app/package.json"
+
+          $package = Get-Content -LiteralPath $packagePath -Raw |
+            ConvertFrom-Json
+
+          $package.version = $env:CAELVYR_VERSION
+
+          $package |
+            ConvertTo-Json -Depth 15 |
+            Set-Content -LiteralPath $packagePath -Encoding utf8
+
+      - name: Install Electron and build the Windows installer
+        shell: pwsh
+        run: |
+          Push-Location "windows-app"
+
+          try {
+            npm install
+            if ($LASTEXITCODE -ne 0) {
+              throw "Installing Windows app dependencies failed."
+            }
+
+            npx electron-builder --win nsis --x64 --publish never
+            if ($LASTEXITCODE -ne 0) {
+              throw "Building the Windows installer failed."
+            }
+          }
+          finally {
+            Pop-Location
+          }
+
+      - name: Upload the Windows installer to the same release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $installerPath = Join-Path $env:GITHUB_WORKSPACE (
+            "windows-app/dist/Caelvyr-Aeronautical-Dynamics-Setup-" +
+            $env:CAELVYR_VERSION +
+            ".exe"
+          )
+
+          if (!(Test-Path $installerPath)) {
+            throw "The Windows installer was not created at the expected path."
+          }
+
+          gh release upload `
+            "$env:RELEASE_TAG" `
+            "$installerPath" `
+            --repo "$env:GITHUB_REPOSITORY" `
+            --clobber
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not upload the Windows installer to the release."
+          }
