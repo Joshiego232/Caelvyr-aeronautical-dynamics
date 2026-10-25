@@ -1,4 +1,3 @@
-
 const { app, BrowserWindow } = require("electron");
 const express = require("express");
 const http = require("node:http");
@@ -40,9 +39,7 @@ async function createWindow() {
     }
   });
 
-  await window.loadURL(
-    `http://127.0.0.1:${address.port}/index.html`
-  );
+  await window.loadURL(`http://127.0.0.1:${address.port}/index.html`);
 }
 
 app.whenReady()
